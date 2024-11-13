@@ -19,6 +19,14 @@ def compute_returns(s):
     else:
         raise TypeError("Expected pd.DataFrame or pd.Series")
 
+def compute_logreturns(s):
+    if isinstance(s, pd.DataFrame):
+        return s.aggregate(compute_logreturns)
+    elif isinstance(s, pd.Series):
+        return np.log(s / s.shift(1))
+    else:
+        raise TypeError("Expected pd.DataFrame or pd.Series")
+
 def annualize_returns(s, periods_per_year):
     if isinstance(s, pd.DataFrame):
         return s.aggregate(annualize_rets, periods_per_year=periods_per_year)
@@ -142,3 +150,43 @@ def cppi(risky_rets, safe_rets=None, start_value=1000, floor=0.8, m=3, drawdown=
         })
 
     return backtest_result
+
+# ---------------------------------------------------------------------------------
+# Random walks
+# ---------------------------------------------------------------------------------
+
+def gbm_from_returns(n_years=10, n_scenarios=20, mu=0.07, sigma=0.15, periods_per_year=12, start=100.0):
+    '''
+    (S_{t+dt} - S_t) / S_t = mu * dt + sigma * sqrt(dt) * xi
+    where xi is a normal random variable in N(0, 1)
+    '''
+    dt = 1 / periods_per_year
+    n_steps = int(n_years * periods_per_year)
+    rets = pd.DataFrame( np.random.normal(loc=mu*dt, scale=sigma*(dt**0.5), size=(n_steps, n_scenarios)) )
+    prices = compound_returns(rets, start=start)
+    prices = insert_first_row_df(prices, start)
+
+    return prices, rets
+
+def gbm_from_prices(n_years=10, n_scenarios=20, mu=0.07, sigma=0.15, periods_per_year=12, start=100.0):
+    '''
+    S_t = S_0 * exp{ (mu - sigma^2 / 2) * dt + sigma * sqrt(dt) * xi }
+    where xi is a normal random variable in N(0, 1)
+    '''
+    dt = 1 / periods_per_year
+    n_steps = int(n_years * periods_per_year)
+    factor_dt = np.exp( np.random.normal(loc=(mu - 0.5*sigma**2)*dt, scale=sigma*(dt**(0.5)), size=(n_steps, n_scenarios)) )
+    prices = start * pd.DataFrame(factor_dt).cumprod()
+    prices = insert_first_row_df(prices, start)
+    rets = compute_logreturns(prices).dropna()
+
+    return prices, rets
+
+# ---------------------------------------------------------------------------------
+# Pandas methods
+# ---------------------------------------------------------------------------------
+
+def insert_first_row_df(df, row):
+    df.loc[-1] = row
+    df.index = df.index + 1
+    return df.sort_index()
