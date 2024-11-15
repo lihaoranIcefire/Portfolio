@@ -155,7 +155,7 @@ def cppi(risky_rets, safe_rets=None, start_value=1000, floor=0.8, m=3, drawdown=
 # Random walks
 # ---------------------------------------------------------------------------------
 
-def gbm_from_returns(n_years=10, n_scenarios=20, mu=0.07, sigma=0.15, periods_per_year=12, start=100.0):
+def simulate_gbm_from_returns(n_years=10, n_scenarios=20, mu=0.07, sigma=0.15, periods_per_year=12, start=100.0):
     '''
     (S_{t+dt} - S_t) / S_t = mu * dt + sigma * sqrt(dt) * xi
     where xi is a normal random variable in N(0, 1)
@@ -168,7 +168,7 @@ def gbm_from_returns(n_years=10, n_scenarios=20, mu=0.07, sigma=0.15, periods_pe
 
     return prices, rets
 
-def gbm_from_prices(n_years=10, n_scenarios=20, mu=0.07, sigma=0.15, periods_per_year=12, start=100.0):
+def simulate_gbm_from_prices(n_years=10, n_scenarios=20, mu=0.07, sigma=0.15, periods_per_year=12, start=100.0):
     '''
     S_t = S_0 * exp{ (mu - sigma^2 / 2) * dt + sigma * sqrt(dt) * xi }
     where xi is a normal random variable in N(0, 1)
@@ -181,6 +181,80 @@ def gbm_from_prices(n_years=10, n_scenarios=20, mu=0.07, sigma=0.15, periods_per
     rets = compute_logreturns(prices).dropna()
 
     return prices, rets
+
+# ---------------------------------------------------------------------------------
+# CIR model
+# ---------------------------------------------------------------------------------
+
+def discount(t, r):
+    if not isinstance(t, pd. Series):
+        t = pd.Series(t)
+    if not isinstance(r, list):
+        r = np.array([r])
+    df = pd.DataFrame(1 / (1 + r) ** t)
+    df.index = t
+    return df
+
+def present_value(s, r):
+    if not isinstance(s, pd.DataFrame):
+        raise TypeError("Expected pd.DataFrame")
+    dates = pd.Series(s.index)
+    return (discount(dates, r) * s).sum()
+
+def funding_ratio(asset_value, liabilities, r):
+    return asset_value / present_value(liabilities, r)
+
+def compounding_rate(r, periods_per_year=None):
+    '''
+    Given a nominal rate r, it returns the continuously compounded rate R = e^r - 1 if periods_per_year is None.
+    If periods_per_year is not None, then returns the discrete compounded rate R = (1 + r / N) ** N - 1.
+    '''
+    if periods_per_year is None:
+        return np.exp(r) - 1
+    else:
+        return (1 + r / periods_per_year) ** periods_per_year - 1
+
+def compounding_rate_inv(R, periods_per_year=None):
+    '''
+    Given a compounded rate R, it returns the nominal rate r from continuously compounding 
+    r = log(1 + R) if periods_per_year is None
+    If periods_per_year is not None, then returns the nominal rate from discrete 
+    compounding r = N * [(1 + R) ^ (1 / N) - 1]
+    '''
+    if periods_per_year is None:
+        return np.log(1 + R)
+    else:
+        return periods_per_year * ( (1 + R) ** (1 / periods_per_year) - 1 )
+
+def simulate_cir(n_years=10, n_scenarios=10, a=0.05, b=0.03, sigma=0.05, periods_per_year=12, r0=None):
+    if r0 is None:
+        r0 = b
+    
+    def zcbprice(ttm, r, h):
+        A = ( 2*h*np.exp((a+h)*ttm/2) / (2*h + (a+h)*(np.exp(h*ttm)-1)) ) ** (2 * a * b / sigma ** 2)
+        B = 2*(np.exp(h*ttm)-1) / (2*h + (a+h)*(np.exp(h*ttm)-1)) 
+        return A * np.exp(-B * r)
+
+    dt = 1 / periods_per_year
+    n_steps = int(n_years * periods_per_year) + 1
+
+    r0 = compounding_rate_inv(r0)
+
+    xi = np.random.normal(loc=0, scale=dt**0.5, size=(n_steps, n_scenarios))
+
+    rates = np.zeros_like(xi)
+    rates[0] = r0
+
+    zcb_prices = np.zeros_like(xi)
+    h = np.sqrt(a**2 + 2 * sigma**2)
+    zcb_prices[0] = zcbprice(n_years, r0, h)
+
+    for step in range(1, n_steps):
+        r_t = rates[step - 1]
+        rates[step] = r_t + a * (b - r_t) + sigma * np.sqrt(r_t) * xi[step]
+        zcb_prices[step] = zcbprice(n_years - dt * step, r_t, h)
+
+    return rates, zcb_prices
 
 # ---------------------------------------------------------------------------------
 # Pandas methods
