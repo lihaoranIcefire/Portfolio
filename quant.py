@@ -264,3 +264,22 @@ def insert_first_row_df(df, row):
     df.loc[-1] = row
     df.index = df.index + 1
     return df.sort_index()
+
+def mac_duration(cash_flows, discount_rate):
+    pass
+
+def ldi_mixer(psp_rets, lhp_rets, allocator):
+    if psp_rets.shape == lhp_rets.shape:
+        raise ValueError
+
+def ldi_fixed_allocator():
+    pass
+
+def ldi_glidepath_allocator():
+    pass
+
+def ldi_floor_allocator():
+    pass
+
+def ldi_drawdown_allocator():
+    pass
