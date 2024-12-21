@@ -256,6 +256,28 @@ def simulate_cir(n_years=10, n_scenarios=10, a=0.05, b=0.03, sigma=0.05, periods
 
     return rates, zcb_prices
 
+
+# ---------------------------------------------------------------------------------
+# Mortgage
+# ---------------------------------------------------------------------------------
+
+def pmt(r, n, pv, fv):
+    """
+    Calculates the payment for a loan based on constant payments and a constant interest rate.
+    See https://support.microsoft.com/en-us/office/pmt-function-f30c80b4-7710-4959-b10b-498c3a5a8a55
+
+    Input:
+    r: interest rate for the loan
+    n: total number of payments for the loan
+    pv: present value, or principal. the total amount that a series of future payments is worth now
+    fv: future value. a cash balance you want to attain after the last payment is made. It is assumed to be 0
+
+    Output:
+    Monthly payment
+    """
+    return r / ((1 + r)^n - 1) * (pv * (1 + r)^n - fv)
+
+
 # ---------------------------------------------------------------------------------
 # Pandas methods
 # ---------------------------------------------------------------------------------
